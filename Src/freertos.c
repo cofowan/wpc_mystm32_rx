@@ -95,6 +95,10 @@ led_blinky_t mBliky = {
 			.mode = LED_NULL, 
 			.gpioport = LED_GPIO_Port, 
 			LED_Pin };
+
+/* Declare a variable to hold the created event group. */
+EventGroupHandle_t xControlUartEventGroup = NULL;
+
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
@@ -111,7 +115,16 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
-       
+    xControlUartEventGroup = xEventGroupCreate();
+	/* Was the event group created successfully? */
+	if( xControlUartEventGroup == NULL )
+	{
+		
+	}
+	else
+	{
+	/* The event group was created. */
+	}
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -141,8 +154,8 @@ void MX_FREERTOS_Init(void) {
  // UART_RxTaskHandle = osThreadCreate(osThread(UART_RxTask), NULL);
 
   /* definition and creation of Get_ADC_Task */
- // osThreadDef(Get_ADC_Task, Get_ADC_Task_Handle, osPriorityAboveNormal, 0, 768);
- // Get_ADC_TaskHandle = osThreadCreate(osThread(Get_ADC_Task), NULL);
+  osThreadDef(Get_ADC_Task, Get_ADC_Task_Handle, osPriorityAboveNormal, 0, 768);
+  Get_ADC_TaskHandle = osThreadCreate(osThread(Get_ADC_Task), NULL);
 
   /* definition and creation of Interrupt_task */
  // osThreadDef(Interrupt_task, Interrupt_task_handle, osPriorityHigh, 0, 512);
@@ -150,6 +163,7 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+ 
   /* USER CODE END RTOS_THREADS */
 
 }
@@ -170,10 +184,21 @@ void StartDefaultTask(void const * argument)
     
 
   /* USER CODE BEGIN StartDefaultTask */
+	EventBits_t uxBits;
   /* Infinite loop */
   for(;;)
   {
-    osDelay(2000);
+    uxBits = xEventGroupWaitBits(
+		xControlUartEventGroup, /* The event group being tested. */
+		BIT_ADC_OK | BIT_RX_OKN, /* The bits within the event group to wait for. */
+		pdTRUE, /* BIT_0 and BIT_4 should be cleared before returning. */
+		//pdFALSE, /* Don't wait for both bits, either bit will do. */
+	   pdTRUE,
+		portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
+	 if( ( uxBits & ( BIT_ADC_OK | BIT_RX_OKN ) ) == ( BIT_ADC_OK | BIT_RX_OKN ) )
+	{
+		HAL_UART_Transmit_IT(&huart3,(uint8_t *)"yes\n",4); //经调试ok
+	}
   }
   /* USER CODE END StartDefaultTask */
 }
@@ -207,6 +232,8 @@ void UART_Receive_TaskHandle(void const * argument)
 void Get_ADC_Task_Handle(void const * argument)
 {
   /* USER CODE BEGIN Get_ADC_Task_Handle */
+	BaseType_t xHigherPriorityTaskWoken, xResult;
+	
 	#define SAMPLE_CNT 59
 	#define SAMPLE_MIDDLE_VALUE ( SAMPLE_CNT / 2 )
 	static uint32_t adc_cur[SAMPLE_CNT] = {0};
@@ -240,8 +267,12 @@ void Get_ADC_Task_Handle(void const * argument)
 			  pData->ch = '\n';
 			  if( ble_connect_flag == 1) //只有互连BLE,才发送，免出错卡死
 			  {		
-				   HAL_UART_Transmit_IT( &huart3, (uint8_t *)pData, sizeof(vol_cur_t) ); //通过串口发送出去
+				  // HAL_UART_Transmit_IT( &huart3, (uint8_t *)pData, sizeof(vol_cur_t) ); //通过串口发送出去
 			  }
+				xResult = xEventGroupSetBits(
+				xControlUartEventGroup, 
+				BIT_ADC_OK );
+	
 			  
 		  }
 		 

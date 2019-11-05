@@ -121,6 +121,8 @@ typedef struct
 	uint16_t crc;
 	char	 ch;
 }vol_cur_t;
+#define BIT_RX_OKN ( 1 << 0 )
+#define BIT_ADC_OK ( 1 << 1 )
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/

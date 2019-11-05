@@ -23,6 +23,8 @@
 /* USER CODE BEGIN 0 */
 #include "main.h"
 #include "cmsis_os.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "stdio.h"
 #include "string.h"
 extern osSemaphoreId UART_ReceiveBinarySemHandle;
@@ -32,6 +34,7 @@ uint8_t RxData[20];
 extern EventGroupHandle_t xEventGrop_LED;
 extern __IO uint8_t over_vol_tx_flag;
 extern __IO uint8_t ble_connect_flag;
+extern EventGroupHandle_t xControlUartEventGroup;
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart3;
@@ -132,6 +135,9 @@ int fputc(int ch,FILE *f)
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 {
+	BaseType_t xHigherPriorityTaskWoken, xResult;
+	/* xHigherPriorityTaskWoken must be initialized to pdFALSE. */
+	xHigherPriorityTaskWoken = pdFALSE;
 	static uint16_t Index; 
 	uint16_t temp;
 	if(UartHandle == &huart3)
@@ -143,23 +149,20 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 			ble_connect_flag = 1;
 			//接收到数据进行处理！可以用来判断是否蓝牙断开！
 			HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin); //这里设这个，在正常传输数据时，led快速闪烁，表明在快速传送数据中，非常好！！
+			if( strncmp( ( const char* )RxData, "ok", 2 ) == 0 ) //判断是否接收到ok的信号
+			{
+				//HAL_UART_Transmit_IT(&huart3,(uint8_t *)"yes\n",4); //经调试ok
 			
-			if(Index == 3) //0xFFFF + '\n'是3个字节，0xFFFF表示还没有连上ble
-			{
-				temp = RxData[0] | ( RxData[1] << 8 );
-				if( temp == 0xFFFF ) //值为0xFFFF表示还没连上BLE
-				{
-					ble_connect_flag = 0; 
-				}
-				else //已连上BLE
-				{//此置1，目的为了在1ms的数据采集任务中，以此为依据，若200ms检测不到蓝牙，则关闭led,连上长亮，HAL_GPIO_TogglePin，接收中快闪！
-					ble_connect_flag = 1;
+				xResult = xEventGroupSetBitsFromISR(
+				xControlUartEventGroup, 
+				BIT_RX_OKN, 
+				&xHigherPriorityTaskWoken );
+				if( xResult != pdFAIL )
+				{			
+					portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 				}
 			}
-			else if(Index > 3) //开启了反射接收，并且每次发送约5个字节，到这里表时蓝牙连接正常。
-			{
-					ble_connect_flag = 1; //每隔200ms freertos会把ble_connect_flag 清0，所以这里要设1
-			}
+			
 			Index=0;
 		}
 		HAL_UART_Receive_IT(&huart3, &uart_receive_data, 1);
