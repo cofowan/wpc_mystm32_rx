@@ -98,7 +98,7 @@ led_blinky_t mBliky = {
 
 /* Declare a variable to hold the created event group. */
 EventGroupHandle_t xControlUartEventGroup = NULL;
-
+vol_cur_t *pData = NULL;
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
@@ -197,7 +197,8 @@ void StartDefaultTask(void const * argument)
 		portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
 	 if( ( uxBits & ( BIT_ADC_OK | BIT_RX_OKN ) ) == ( BIT_ADC_OK | BIT_RX_OKN ) )
 	{
-		HAL_UART_Transmit_IT(&huart3,(uint8_t *)"yes\n",4); //经调试ok
+		//HAL_UART_Transmit_IT(&huart3,(uint8_t *)"yes\n",4); //经调试ok
+		HAL_UART_Transmit_IT( &huart3, (uint8_t *)pData, sizeof(vol_cur_t) );
 	}
   }
   /* USER CODE END StartDefaultTask */
@@ -241,7 +242,7 @@ void Get_ADC_Task_Handle(void const * argument)
 	static uint8_t index = 0;
 	static uint32_t cnt = 0;
 	uint32_t ulNotifycationValue;
-	vol_cur_t *pData = (vol_cur_t *)calloc(1,sizeof(vol_cur_t));
+	pData = (vol_cur_t *)calloc(1,sizeof(vol_cur_t));
 	const TickType_t xMaxBlockTime = pdMS_TO_TICKS( 8 );
 	vTaskDelay(700); //刚开始时延时500ms在取样
   /* Infinite loop */
