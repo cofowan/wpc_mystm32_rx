@@ -33,7 +33,7 @@ uint8_t RxData[20];
 
 extern EventGroupHandle_t xEventGrop_LED;
 extern __IO uint8_t over_vol_tx_flag;
-extern __IO uint8_t ble_connect_flag;
+
 extern EventGroupHandle_t xControlUartEventGroup;
 /* USER CODE END 0 */
 
@@ -139,14 +139,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 	/* xHigherPriorityTaskWoken must be initialized to pdFALSE. */
 	xHigherPriorityTaskWoken = pdFALSE;
 	static uint16_t Index; 
-	uint16_t temp;
 	if(UartHandle == &huart3)
 	{
 		RxData[Index] = uart_receive_data;
 		Index++;
 		if(RxData[Index -1] == '\n' || RxData[Index -1] == '\r' || ( Index >= 20 ) )
 		{
-			ble_connect_flag = 1;
+			
 			//接收到数据进行处理！可以用来判断是否蓝牙断开！
 			HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin); //这里设这个，在正常传输数据时，led快速闪烁，表明在快速传送数据中，非常好！！
 			if( strncmp( ( const char* )RxData, "ok", 2 ) == 0 ) //判断是否接收到ok的信号

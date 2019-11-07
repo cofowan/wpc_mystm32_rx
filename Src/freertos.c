@@ -88,7 +88,7 @@ extern UART_HandleTypeDef huart3;
 extern __IO wireless_charge_data_t myWC_dat;
 extern uint32_t myADC[2];
 extern __IO uint8_t over_vol_tx_flag;
-__IO uint8_t ble_connect_flag = 0;
+
 extern 	__IO SignalData mydata ;
 
 led_blinky_t mBliky = {
@@ -158,8 +158,8 @@ void MX_FREERTOS_Init(void) {
   Get_ADC_TaskHandle = osThreadCreate(osThread(Get_ADC_Task), NULL);
 
   /* definition and creation of Interrupt_task */
- // osThreadDef(Interrupt_task, Interrupt_task_handle, osPriorityHigh, 0, 512);
- // Interrupt_taskHandle = osThreadCreate(osThread(Interrupt_task), NULL);
+  osThreadDef(Interrupt_task, Interrupt_task_handle, osPriorityHigh, 0, 512);
+  Interrupt_taskHandle = osThreadCreate(osThread(Interrupt_task), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -197,7 +197,6 @@ void StartDefaultTask(void const * argument)
 		portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
 	 if( ( uxBits & ( BIT_ADC_OK | BIT_RX_OKN ) ) == ( BIT_ADC_OK | BIT_RX_OKN ) )
 	{
-		//HAL_UART_Transmit_IT(&huart3,(uint8_t *)"yes\n",4); //经调试ok
 		HAL_UART_Transmit_IT( &huart3, (uint8_t *)pData, sizeof(vol_cur_t) );
 	}
   }
@@ -233,14 +232,14 @@ void UART_Receive_TaskHandle(void const * argument)
 void Get_ADC_Task_Handle(void const * argument)
 {
   /* USER CODE BEGIN Get_ADC_Task_Handle */
-	BaseType_t xHigherPriorityTaskWoken, xResult;
+	BaseType_t xResult;
 	
 	#define SAMPLE_CNT 59
 	#define SAMPLE_MIDDLE_VALUE ( SAMPLE_CNT / 2 )
 	static uint32_t adc_cur[SAMPLE_CNT] = {0};
 	static uint32_t adc_vol[SAMPLE_CNT] = {0};
 	static uint8_t index = 0;
-	static uint32_t cnt = 0;
+	//static uint32_t cnt = 0;
 	uint32_t ulNotifycationValue;
 	pData = (vol_cur_t *)calloc(1,sizeof(vol_cur_t));
 	const TickType_t xMaxBlockTime = pdMS_TO_TICKS( 8 );
@@ -265,33 +264,22 @@ void Get_ADC_Task_Handle(void const * argument)
 			  qsort( adc_vol, SAMPLE_CNT, sizeof( uint32_t ), com );	
 			  pData->data.vol = adc_vol[SAMPLE_MIDDLE_VALUE];
 			  pData->data.cur = adc_cur[SAMPLE_MIDDLE_VALUE];
-			  pData->ch = '\n';
-			  if( ble_connect_flag == 1) //只有互连BLE,才发送，免出错卡死
+			  if( over_load_rx == 1 ) //若发生过载，其变量为1，否则为0
 			  {		
-				  // HAL_UART_Transmit_IT( &huart3, (uint8_t *)pData, sizeof(vol_cur_t) ); //通过串口发送出去
+				  over_load_rx = 0;		//清0，为下次做准备
+				  pData->data.overload = 1;
 			  }
-				xResult = xEventGroupSetBits(
-				xControlUartEventGroup, 
-				BIT_ADC_OK );
-	
-			  
-		  }
-		 
-		  
-		  if(cnt++ > 200) //200ms 检测一次,蓝牙的连接状态
-		  {
-			  cnt = 0;
-			  if(ble_connect_flag == 1) //在串口中断置1，有中断表明蓝正常工作
+			  else  
 			  {
-				  //ble_connect_flag = 0;
-				  HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin,GPIO_PIN_RESET);//点亮LED
+				  pData->data.overload = 0; //不发生过载，其变量为0
 			  }
-			  else //若蓝牙不连接，则熄led
-			  {
-				  HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin,GPIO_PIN_SET);//点灭LED 
-			  }
+			  pData->ch = '\n';
+			  //给出事件组设定位
+			  xResult = xEventGroupSetBits(
+											xControlUartEventGroup, 
+											BIT_ADC_OK );
+			  (void) xResult;  
 		  }
-		 
 		   
 	  }
 	  else //超时
@@ -312,7 +300,6 @@ void Get_ADC_Task_Handle(void const * argument)
 void Interrupt_task_handle(void const * argument)
 {
   /* USER CODE BEGIN Interrupt_task_handle */
-	uint32_t times_limit = 0;
 	uint32_t ulNotificationValue;
 	const TickType_t xMaxBlockTime = pdMS_TO_TICKS(500);
 	
@@ -321,23 +308,12 @@ void Interrupt_task_handle(void const * argument)
   {
    
 		ulNotificationValue = ulTaskNotifyTake( pdFALSE, xMaxBlockTime ); //等待任务通知
-		if( ulNotificationValue == 1 ) //发生过压中断
+		if( ulNotificationValue == 1 ) //发生过压中断将过载标识位置1，它在取得电压电流值时统一发送
 		{
-			// The transmission ended as expected. 
-			//连续检测到10个中断信号时，才确认！每50ms中再确认一次
-			if( times_limit >= 2 ) //只能50ms内再检测！过快速度会导至蓝牙出错,也就是发生中断后，保持50ms，再来判断！
-			{
-				 over_load_rx = 1;
-			}
-			times_limit++; //只能45ms内再检测！过快速度会导至蓝牙出错
+			over_load_rx = 1;
+			
 		}
-		else //45ms内没发现过压中断
-		{
-			// The call to ulTaskNotifyTake() timed out. 
-			times_limit = 0; //只能200ms内再检测！过快速度会导至蓝牙出错
-			 
-		}
-		
+
   }
   /* USER CODE END Interrupt_task_handle */
 }

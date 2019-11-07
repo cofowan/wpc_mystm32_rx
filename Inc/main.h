@@ -114,6 +114,7 @@ typedef struct
 {
 	uint16_t vol;
 	uint16_t cur;
+	uint16_t overload;
 }data_t;
 typedef struct
 {
